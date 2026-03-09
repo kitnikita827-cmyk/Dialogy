@@ -1284,6 +1284,14 @@ function backToAuth() {
    ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
 ═══════════════════════════════════════════════════════════════ */
 async function initApp(user) {
+// --- ЗАЩИТА ---
+  const myDomain = 'kitnikita827-cmyk.github.io';
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
+  if (window.location.hostname !== myDomain && !isLocal) {
+    document.body.innerHTML = '<div style="background:#0a0d14;color:#7d98bb;height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif;"><h1>403: Forbidden</h1></div>';
+    return;
+  }
+  // --------------
   if (appInited) return;
   appInited = true;
   me = user;
