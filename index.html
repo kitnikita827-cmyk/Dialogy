@@ -1018,15 +1018,22 @@ mark{background:rgba(251,191,36,.3);color:var(--t1);border-radius:3px;padding:0 
 ═══════════════════════════════════════════════════════════════ */
 import { Client, Account, Databases, ID, Query } from 'https://cdn.jsdelivr.net/npm/appwrite@14.0.0/+esm';
 
-const AW_ENDPOINT = 'https://cloud.appwrite.io/v1';
-const AW_PROJECT  = '35c2e58c-654b-4e5b-b4b6-957d6d590b31';
-const AW_DB       = '69ae9dbb003db9c1d8a8';
-const AW_COL      = 'messages';
+/* ── КОНФИГУРАЦИЯ ────────────────────────────────────────────── */
+const AW_ENDPOINT    = 'https://fra.cloud.appwrite.io/v1';
+const AW_PROJECT     = '69ade8b50015dca7497a';
+const AW_DB          = '69ae9dbb003db9c1d8a8';
+const AW_COL_MSG     = 'messages';
+const AW_COL         = AW_COL_MSG;          // алиас для обратной совместимости
+const CLOUDINARY_NAME   = 'dqqjcwttr';
+const CLOUDINARY_PRESET = 'Dialogy Messenger';
 
-const CL_CLOUD    = 'dqqjcwttr';
-const CL_PRESET   = 'Dialogy Messenger';
+// старые имена — оставляем чтобы ничего не сломалось
+const CL_CLOUD  = CLOUDINARY_NAME;
+const CL_PRESET = CLOUDINARY_PRESET;
 
-const client    = new Client().setEndpoint(AW_ENDPOINT).setProject(AW_PROJECT);
+const client    = new Client()
+  .setEndpoint(AW_ENDPOINT)
+  .setProject(AW_PROJECT);
 const account   = new Account(client);
 const databases = new Databases(client);
 
@@ -1127,16 +1134,24 @@ function toast(title,msg='',type='in'){
 /* ═══════════════════════════════════════════════════════════════
    CLOUDINARY UPLOAD
 ═══════════════════════════════════════════════════════════════ */
-async function uploadToCloudinary(fileOrBlob) {
+/**
+ * uploadFile — загружает File/Blob на Cloudinary, возвращает secure_url.
+ * Это основная функция. uploadToCloudinary — алиас для совместимости.
+ */
+async function uploadFile(file) {
   const fd = new FormData();
-  fd.append('file', fileOrBlob);
-  fd.append('upload_preset', CL_PRESET);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CL_CLOUD}/auto/upload`, {method:'POST', body:fd});
-  if (!res.ok) throw new Error('Cloudinary: ' + res.statusText);
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_NAME}/auto/upload`,
+    { method: 'POST', body: fd }
+  );
+  if (!res.ok) throw new Error('Cloudinary upload error: ' + res.statusText);
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message);
+  if (json.error) throw new Error('Cloudinary: ' + json.error.message);
   return json.secure_url;
 }
+const uploadToCloudinary = uploadFile; // обратная совместимость
 
 /* ═══════════════════════════════════════════════════════════════
    НОРМАЛИЗАЦИЯ ДОКУМЕНТА APPWRITE → ФОРМАТ РЕНДЕРА
@@ -1176,7 +1191,18 @@ function normalizeMsg(doc) {
 function authTab(t){const li=t==='li';['li','su'].forEach(x=>{document.getElementById('tab-'+x).classList.toggle('on',x===t);document.getElementById('form-'+x).style.display=x===t?'block':'none';});}
 function setBtn(id,on){const b=document.getElementById(id);if(!b)return;b.disabled=on;b.classList.toggle('ld',on);}
 function errMsg(id,t){const e=document.getElementById(id);if(!e)return;e.textContent=t;e.style.display=t?'block':'none';if(t){e.classList.remove('shake');void e.offsetWidth;e.classList.add('shake');}}
-function xlErr(m){const s=m.toLowerCase();if(s.includes('failed to fetch')||s.includes('networkerror')||s.includes('network request failed'))return'⚠️ Нет связи с сервером. Убедитесь, что файл открыт через веб-сервер (не file://) и домен добавлен в Appwrite Console → Settings → Platforms.';if(s.includes('rate limit'))return'⏱ Лимит запросов.';if(s.includes('invalid credentials')||s.includes('invalid email or password')||s.includes('invalid email'))return'Неверный email или пароль.';if(s.includes('email already')||s.includes('already exists'))return'Email уже зарегистрирован.';if(s.includes('password'))return'Пароль: минимум 8 символов.';return m;}
+function xlErr(m) {
+  const s = m.toLowerCase();
+  if (s.includes('failed to fetch') || s.includes('networkerror') || s.includes('network request failed'))
+    return '⚠️ Нет связи с сервером. Убедитесь, что домен kitnikita827-cmyk.github.io добавлен в Appwrite Console → Settings → Platforms.';
+  if (s.includes('rate limit'))       return '⏱ Лимит запросов. Попробуйте чуть позже.';
+  if (s.includes('invalid credentials') || s.includes('invalid email or password') || s.includes('invalid email'))
+    return 'Неверный email или пароль.';
+  if (s.includes('email already') || s.includes('already exists'))
+    return 'Email уже зарегистрирован.';
+  if (s.includes('password'))         return 'Пароль: минимум 8 символов.';
+  return m;
+}
 function showRateLimitModal(){document.getElementById('rl-modal')?.classList.add('on');}
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1331,11 +1357,12 @@ function subMessages() {
   if (realtimeSub) { try { realtimeSub(); } catch {} realtimeSub = null; }
   setLiveStatus('reconnecting');
   try {
+    // Подписываемся строго на коллекцию messages
     realtimeSub = client.subscribe(
-      `databases.${AW_DB}.collections.${AW_COL}.documents`,
+      `databases.${AW_DB}.collections.${AW_COL_MSG}.documents`,
       (response) => {
         const events = response.events;
-        const doc = response.payload;
+        const doc    = response.payload;
 
         if (events.some(e => e.includes('.create'))) {
           const msg = normalizeMsg(doc);
@@ -1791,19 +1818,60 @@ document.addEventListener('click', e => { if (!document.getElementById('ctx-menu
 /* ═══════════════════════════════════════════════════════════════
    ОТПРАВКА СООБЩЕНИЯ
 ═══════════════════════════════════════════════════════════════ */
+/**
+ * sendMessage / sendMsg:
+ * 1. Если есть вложенный файл — сначала заливает через uploadFile() на Cloudinary.
+ * 2. Создаёт документ в Appwrite с полями:
+ *    text, sender, username, fileUrl (media_url), media_type, channel, timestamp, senderId.
+ */
 async function sendMsg() {
-  const inp = document.getElementById('m-inp'); const text = inp.value.trim();
+  const inp = document.getElementById('m-inp');
+  const text = inp.value.trim();
   if (!text) return;
-  const btn = document.getElementById('s-btn'); btn.disabled=true; btn.classList.add('ld');
+  const btn = document.getElementById('s-btn'); btn.disabled = true; btn.classList.add('ld');
   stopTyping();
-  if (editId) { await commitEdit(text); btn.disabled=false; btn.classList.remove('ld'); return; }
-  const payload = {text, sender:me.email, username:myName, media_url:'', media_type:'', channel:currentChannel};
-  if (replyTo && hasReplyTo) payload.reply_to = JSON.stringify({id:replyTo.id, username:replyTo.username, content:replyTo.content});
+
+  // режим редактирования
+  if (editId) { await commitEdit(text); btn.disabled = false; btn.classList.remove('ld'); return; }
+
+  const payload = {
+    text,
+    sender:     me.email,
+    senderId:   me.$id,
+    senderName: myName,
+    username:   myName,
+    media_url:  '',
+    media_type: '',
+    fileUrl:    '',
+    channel:    currentChannel,
+    timestamp:  new Date().toISOString(),
+  };
+
+  // если к сообщению прикреплён файл через скрытый input — загружаем
+  const fileInp = document.getElementById('file-inp');
+  if (fileInp && fileInp.files && fileInp.files[0]) {
+    try {
+      toast('Загрузка', 'Отправка файла…', 'in');
+      const fileUrl = await uploadFile(fileInp.files[0]);
+      payload.media_url = fileUrl;
+      payload.fileUrl   = fileUrl;
+      payload.media_type = fileInp.files[0].type.startsWith('image') ? 'image' : 'file';
+      fileInp.value = '';
+    } catch (err) {
+      toast('Ошибка загрузки файла', err.message, 'er');
+      btn.disabled = false; btn.classList.remove('ld');
+      return;
+    }
+  }
+
+  if (replyTo && hasReplyTo)
+    payload.reply_to = JSON.stringify({ id: replyTo.id, username: replyTo.username, content: replyTo.content });
+
   try {
-    await databases.createDocument(AW_DB, AW_COL, ID.unique(), payload);
+    await databases.createDocument(AW_DB, AW_COL_MSG, ID.unique(), payload);
     inp.value = ''; inp.style.height = 'auto'; clearReply();
   } catch (err) { toast('Ошибка отправки', err.message, 'er'); }
-  btn.disabled=false; btn.classList.remove('ld'); inp.focus();
+  btn.disabled = false; btn.classList.remove('ld'); inp.focus();
 }
 
 /* ═══════════════════════════════════════════════════════════════
